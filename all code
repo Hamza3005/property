@@ -1,0 +1,252 @@
+WITH house AS (
+    SELECT 
+        price_paid,
+        deed_date::DATE AS deed_date,
+        postcode,
+        LEFT(postcode, POSITION(' ' IN postcode) - 1) AS postcode_first_part,
+        property_type,
+        estate_type,
+        street,
+        transaction_category
+    FROM 
+        house_prices
+)
+SELECT 
+  price_paid,
+    deed_date,
+    postcode,
+    postcode_first_part,
+    property_type,
+    estate_type,
+    street,
+    transaction_category
+FROM 
+    house;
+
+   
+  
+   
+   with truncated_postcodes as
+	(
+    select
+        postcode, LEFT(postcode, position(' ' in postcode) - 1) AS TruncatedPostcode
+    FROM
+        house_prices hp
+)
+select TruncatedPostcode,
+	AVG(price_paid) as avg_price,
+	deed_date,
+	property_type,
+	new_build,
+	estate_type,
+	transaction_category,
+	count(*) as num_transactions
+from house_prices hp
+left join truncated_postcodes tp
+on hp.postcode = tp.postcode
+group by TruncatedPostcode, deed_date, property_type, new_build, estate_type, transaction_category
+limit 1;
+
+select *
+from house_prices
+where postcode = 'RG1 4FH'
+order by price_paid desc;
+
+
+select *, deed_date::DATE
+from house_prices
+where price_paid > 10000000
+order by price_paid desc;
+
+
+
+
+
+
+
+-- CTE to find the starting average price for each property type and estate type in the first year
+WITH initial_avg_prices AS (
+    SELECT
+        property_type,
+        estate_type,
+        MIN(EXTRACT(YEAR FROM deed_date::DATE)) AS start_year,
+        AVG(price_paid) AS start_avg_price
+    FROM
+        house_prices
+    WHERE
+        price_paid >= 50000
+    GROUP BY
+        property_type, estate_type
+),
+-- CTE to calculate the average price for the first year for each property type and estate type
+first_year_avg_prices AS (
+    SELECT
+        hp.property_type,
+        hp.estate_type,
+        AVG(hp.price_paid) AS first_year_avg_price
+    FROM
+        house_prices hp
+    JOIN
+        initial_avg_prices ip
+    ON
+        hp.property_type = ip.property_type
+        AND hp.estate_type = ip.estate_type
+        AND EXTRACT(YEAR FROM hp.deed_date::DATE) = ip.start_year
+    WHERE
+        hp.price_paid >= 50000
+    GROUP BY
+        hp.property_type, hp.estate_type
+),
+-- CTE to join the initial average prices with the original data and calculate the indexed price
+indexed_prices AS (
+    SELECT
+        hp.unique_id,
+        hp.price_paid,
+        hp.deed_date,
+        hp.postcode,
+        hp.property_type,
+        hp.new_build,
+        hp.estate_type,
+        hp.saon,
+        hp.paon,
+        hp.street,
+        hp.locality,
+        hp.town,
+        hp.district,
+        hp.county,
+        hp.transaction_category,
+        fyp.first_year_avg_price,
+        (hp.price_paid / fyp.first_year_avg_price) * 100 AS indexed_price
+    FROM
+        house_prices hp
+    JOIN
+        first_year_avg_prices fyp
+    ON
+        hp.property_type = fyp.property_type
+        AND hp.estate_type = fyp.estate_type
+    WHERE
+        hp.price_paid >= 50000
+)
+-- Final selection of fields including the indexed price
+SELECT
+    unique_id,
+    price_paid,
+    deed_date,
+    postcode,
+    property_type,
+    new_build,
+    estate_type,
+    saon,
+    paon,
+    street,
+    locality,
+    town,
+    district,
+    county,
+    transaction_category,
+    indexed_price
+FROM
+    indexed_prices
+WHERE
+    indexed_price BETWEEN 99.9 AND 100.1
+
+ORDER BY
+    property_type,
+    estate_type,
+    deed_date,
+    indexed_price DESC;
+   
+
+   
+   
+   
+   
+   
+  select
+  	avg(price_paid)
+  from
+  	house_prices hp 
+  where
+  	estate_type = 'F'
+  	and property_type = 'D'
+  	and EXTRACT(YEAR FROM deed_date::DATE) = 2000;
+  	
+  
+  
+  
+  
+  
+  
+ SELECT
+    estate_type,
+    property_type,
+    AVG(price_paid) AS avg_price_2000,
+    COUNT(*) AS combination_count
+FROM
+    house_prices
+WHERE
+    EXTRACT(YEAR FROM deed_date::DATE) = 2000
+GROUP BY
+    estate_type, property_type
+ORDER BY
+    estate_type, property_type;
+    
+  
+   
+   
+   
+   WITH avg_prices_2000 AS (
+    SELECT
+        estate_type,
+        property_type,
+        AVG(price_paid) AS avg_price_2000
+    FROM
+        house_prices
+    WHERE
+        EXTRACT(YEAR FROM deed_date::DATE) = 2000
+    GROUP BY
+        estate_type, property_type
+),
+avg_prices_all_years AS (
+    SELECT
+        hp.estate_type,
+        hp.property_type,
+        EXTRACT(YEAR FROM hp.deed_date::DATE) AS year,
+        AVG(hp.price_paid) AS avg_price
+    FROM
+        house_prices hp
+    JOIN
+        avg_prices_2000 ap ON hp.estate_type = ap.estate_type AND hp.property_type = ap.property_type
+    GROUP BY
+        hp.estate_type, hp.property_type, year
+)
+SELECT
+    apa.estate_type,
+    apa.property_type,
+    apa.year,
+    apa.avg_price,
+    (apa.avg_price / ap0.avg_price_2000) * 100 AS price_index_2000
+FROM
+    avg_prices_all_years apa
+JOIN
+    avg_prices_2000 ap0 ON apa.estate_type = ap0.estate_type AND apa.property_type = ap0.property_type
+ORDER BY
+    apa.estate_type, apa.property_type, apa.year;
+   
+   
+   
+   
+   
+SELECT
+    LEFT(postcode, POSITION(' ' IN postcode) - 1) AS postcode_first_part,
+    AVG(price_paid) AS avg_price_2001,
+    count(*) 
+FROM
+    house_prices
+WHERE
+    EXTRACT(YEAR FROM deed_date::DATE) = 2001
+    AND price_paid > 50000
+GROUP BY
+    LEFT(postcode, POSITION(' ' IN postcode) - 1)
+ORDER BY
+    postcode_first_part;
